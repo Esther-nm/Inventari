@@ -19,94 +19,79 @@ def desar_inventari(inventari):
     with open(FITXER_DADES, 'w', encoding='utf-8') as f:
         json.dump(inventari, f, indent=4)
 
-# --- Interfície ---
+# --- Configuració i Estil ---
 st.set_page_config(page_title="El meu Inventari", page_icon="📦")
 st.title("📦 Gestor d'Inventari")
 
 inv = carregar_inventari()
 
+# Menú lateral
 menu = st.sidebar.radio("Menú", ["🏠 Inici", "🔍 Veure i Editar", "➕ Nou Producte", "📝 Notes Compra", "🛒 Llista Final"])
 
+# --- SECCIÓ 1: INICI ---
 if menu == "🏠 Inici":
     st.subheader("Benvingut/da!")
     total_prods = sum(len(v) for k, v in inv.items() if k != "Llista_Manual")
-    st.metric("Productes en estoc", total_prods)
-    st.write("Consell: Fes servir el menú lateral per moure't ràpidament.")
+    st.metric("Productes totals en estoc", total_prods)
+    st.info("Pots accedir a les diferents seccions des del menú lateral.")
 
+# --- SECCIÓ 2: NOU PRODUCTE ---
 elif menu == "➕ Nou Producte":
     st.subheader("Afegir producte")
-    
-    # Fem servir un formulari i li posem un nom (clear_on_submit fa la màgia)
     with st.form("formulari_nou", clear_on_submit=True):
-        ubi = st.text_input("Ubicació (ex: Cuina)").strip().capitalize()
+        ubi = st.text_input("Ubicació (ex: Cuina, Rebost)").strip().capitalize()
         nom = st.text_input("Nom del producte").strip().capitalize()
         col1, col2 = st.columns(2)
         with col1:
-            q = st.number_input("Quantitat", min_value=0, value=1)
+            q = st.number_input("Quantitat actual", min_value=0, value=1)
         with col2:
-            m = st.number_input("Estoc mínim (avís)", min_value=0, value=0)
-        cad = st.text_input("Caducitat (opcional)")
+            m = st.number_input("Estoc mínim per avís", min_value=0, value=0)
+        cad = st.text_input("Data caducitat (opcional)")
         
-        enviat = st.form_submit_button("Desar Producte")
-        
-        if enviat:
-            if ubi and nom:
-                if ubi not in inv: inv[ubi] = {}
-                inv[ubi][nom] = {'quantitat': q, 'caducitat': cad, 'estoc_minim': m}
-                desar_inventari(inv)
-                st.success(f"✅ {nom} desar a {ubi}!")
-                # No cal fer rerun, clear_on_submit ja ha netejat els camps
-            else:
-                st.error("Si us plau, omple el nom i la ubicació.")
+        enviat = st.form_submit_button("Desar a l'Inventari")
+        if enviat and ubi and nom:
+            if ubi not in inv: inv[ubi] = {}
+            inv[ubi][nom] = {'quantitat': q, 'caducitat': cad, 'estoc_minim': m}
+            desar_inventari(inv)
+            st.success(f"✅ {nom} afegit correctament!")
 
+# --- SECCIÓ 3: VEURE I EDITAR ---
 elif menu == "🔍 Veure i Editar":
-    st.subheader("Inventari (Ordre Alfabètic)")
-    
-    # Ordenem les ubicacions alfabèticament
+    st.subheader("Consulta per Ubicacions")
     ubicacions_ordenades = sorted([k for k in inv.keys() if k != "Llista_Manual"])
     
     for ubi in ubicacions_ordenades:
-        prods = inv[ubi]
         with st.expander(f"📍 {ubi.upper()}"):
-            # Ordenem els productes de cada ubicació alfabèticament
-            productes_ordenats = sorted(prods.keys())
-            
+            productes_ordenats = sorted(inv[ubi].keys())
             for nom in productes_ordenats:
-                dades = prods[nom]
+                dades = inv[ubi][nom]
                 st.write(f"**{nom}**")
                 col1, col2, col3 = st.columns([2, 2, 1])
                 
-                nova_q = col1.number_input(f"Qt", value=dades['quantitat'], key=f"q_{ubi}_{nom}")
-                nova_cad = col2.text_input(f"Cad", value=dades.get('caducitat', ''), key=f"c_{ubi}_{nom}")
+                nova_q = col1.number_input(f"Qt", value=dades['quantitat'], key=f"q_{ubi}_{nom}", label_visibility="collapsed")
+                nova_cad = col2.text_input(f"Cad", value=dades.get('caducitat', ''), key=f"c_{ubi}_{nom}", label_visibility="collapsed")
                 
                 if col3.button("💾", key=f"b_{ubi}_{nom}"):
                     inv[ubi][nom]['quantitat'] = nova_q
                     inv[ubi][nom]['caducitat'] = nova_cad
                     desar_inventari(inv)
-                    st.toast(f"Actualitzat {nom}") # Missatge discret al peu
+                    st.toast(f"Actualitzat: {nom}")
 
+# --- SECCIÓ 4: NOTES MANUALS ---
 elif menu == "📝 Notes Compra":
-    st.subheader("Llista Manual")
+    st.subheader("Coses extres per comprar")
     
-    # Netejar l'input de la nota manual després d'afegir
-    if 'text_nota' not in st.session_state:
-        st.session_state.text_nota = ""
-
     def afegir_nota():
         item = st.session_state.nova_nota.strip().capitalize()
         if item:
             inv["Llista_Manual"].append(item)
             desar_inventari(inv)
-            st.session_state.nova_nota = "" # Neteja el camp
+            st.session_state.nova_nota = ""
 
-    st.text_input("Què vols afegir?", key="nova_nota", on_change=afegir_nota)
-    st.caption("Prem 'Enter' per afegir a la llista ràpidament")
+    st.text_input("Escriu i prem Enter:", key="nova_nota", on_change=afegir_nota)
     
     st.divider()
-    
-    # Mostrem la llista manual (també ordenada si vols)
-    llista_m = inv.get("Llista_Manual", [])
-    for i, item in enumerate(llista_m):
+    for i, item in enumerate(inv["Llista_Manual"]):
         col1, col2 = st.columns([4, 1])
         col1.write(f"• {item}")
         if col2.button("🗑️", key=f"del_{i}_{item}"):
@@ -114,27 +99,37 @@ elif menu == "📝 Notes Compra":
             desar_inventari(inv)
             st.rerun()
 
+# --- SECCIÓ 5: LLISTA FINAL (LA DEL SÚPER) ---
 elif menu == "🛒 Llista Final":
-    st.subheader("🛒 Llista de la Compra")
-    falta = False
+    st.subheader("🛒 Check-list per anar a comprar")
+    st.caption("Marca els productes a mesura que els posis al carret.")
     
-    st.write("### ⚠️ Baix Estoc")
-    # També ordenem aquí per trobar les coses millor al súper
-    ubicacions_ordenades = sorted([k for k in inv.keys() if k != "Llista_Manual"])
-    for ubi in ubicacions_ordenades:
-        prods = inv[ubi]
-        prods_ordenats = sorted(prods.keys())
-        for nom in prods_ordenats:
-            dades = prods[nom]
-            min_r = dades.get('estoc_minim', 0)
-            if dades['quantitat'] <= min_r:
-                st.warning(f"**{nom}** ({ubi}) - Queden: {dades['quantitat']} (Mín: {min_r})")
-                falta = True
-                
-    st.write("### 📌 Notes Manuals")
-    for item in sorted(inv.get("Llista_Manual", [])):
-        st.info(item)
-        falta = True
+    falta_alguna_cosa = False
     
-    if not falta:
-        st.success("Tot correcte! No falta res.")
+    # 1. Automàtic per estoc baix
+    st.markdown("### ⚠️ Reposar (Estoc Baix)")
+    ubi_ord = sorted([k for k in inv.keys() if k != "Llista_Manual"])
+    for ubi in ubi_ord:
+        for nom in sorted(inv[ubi].keys()):
+            d = inv[ubi][nom]
+            if d['quantitat'] <= d.get('estoc_minim', 0):
+                st.checkbox(f"**{nom}** ({ubi}) - En queden: {d['quantitat']}", key=f"ch_auto_{nom}_{ubi}")
+                falta_alguna_cosa = True
+
+    st.divider()
+
+    # 2. Manuals
+    st.markdown("### 📌 Notes Manuals")
+    notes = inv.get("Llista_Manual", [])
+    if not notes and not falta_alguna_cosa:
+        st.success("No tens res pendent de comprar!")
+    else:
+        for i, item in enumerate(sorted(notes)):
+            st.checkbox(item, key=f"ch_man_{i}_{item}")
+    
+    # Botó especial al final per netejar la llista manual quan tornes a casa
+    st.sidebar.divider()
+    if st.sidebar.button("Buidar Notes Manuals"):
+        inv["Llista_Manual"] = []
+        desar_inventari(inv)
+        st.rerun()
